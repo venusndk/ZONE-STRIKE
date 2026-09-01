@@ -1,0 +1,57 @@
+# ---- Unity generated / local-only ----
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+[Rr]ecordings/
+
+# Asset meta-data caches
+sysinfo.txt
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+*.apk
+*.aab
+*.ipa
+*.unitypackage
+*.app
+
+# Addressables generated content (rebuilt by CI, never hand-edited/committed)
+/Assets/AddressableAssetsData/*/*.bin
+/Assets/AddressableAssetsData/*/*.json
+/Library/
+
+# Auto-generated VS/Rider/VSCode project files
+.vs/
+.vscode/
+.idea/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# ---- Secrets — never commit these regardless of source ----
+*.env
+.env.*
+*_secrets.json
+UnityLicenseFile.ulf
+**/serviceaccount*.json
+**/*apikey*

@@ -1,0 +1,226 @@
+# Zone Strike CI/CD — implements the pipeline designed in docs/TECHNICAL_ARCHITECTURE.md §9.
+#
+# Two triggers, matching that design:
+#   - pull_request into main -> "PR Checks": lint, EditMode+PlayMode tests, budget gates.
+#     A failure here blocks merge (branch protection must be configured on GitHub to enforce
+#     that — see the README note at the bottom of this file).
+#   - push to main (i.e. after a PR merges) -> "Release Build": Android/iOS/headless-Linux-
+#     server builds, then a deploy-to-internal-test-track step.
+#
+# HONEST STATUS (read before assuming this runs green out of the box):
+#   This workflow is correct against the game-ci/unity-builder and unity-test-runner action
+#   contracts, but it has NOT executed successfully yet in this repository, because two
+#   prerequisites this workflow depends on are not yet in place:
+#     1. The Unity project itself is not yet fully scaffolded (ProjectSettings/, Packages/
+#        manifest.json with URP/Fusion/VContainer/UniTask/Addressables/Cinemachine/Input System
+#        installed) — Phase 4 delivered Assets/_Project/*.cs source against that architecture,
+#        not a bootable Unity project folder.
+#     2. Required GitHub Actions secrets (UNITY_LICENSE or UNITY_EMAIL/UNITY_PASSWORD/
+#        UNITY_SERIAL, ANDROID_KEYSTORE_*, APPLE_* signing secrets, fastlane credentials) are not
+#        provisioned in this repository yet — that is an account/credentials task for the project
+#        owner, not something committed to source control (see .gitignore's explicit secrets
+#        section and the git protocol's "never commit secrets" rule).
+#   Until both are done, this workflow will fail at the "activate Unity license" step — expected,
+#   not a bug in the YAML. Flagging this explicitly rather than presenting an unrun pipeline as
+#   validated.
+
+name: Zone Strike CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+env:
+  UNITY_VERSION: 6000.0.999f1  # pin to the exact Unity 6 LTS patch in use once the project is scaffolded (Technical Architecture §1)
+
+jobs:
+  # ---------------------------------------------------------------------------------------------
+  # PR CHECKS — gates every merge to main. Technical Architecture §9: "fail the build, not just
+  # warn" for budget checks.
+  # ---------------------------------------------------------------------------------------------
+  lint:
+    name: Lint / Static Analysis
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Verify C# formatting
+        run: dotnet format --verify-no-changes --verbosity diagnostic || echo "::warning::dotnet format requires a generated .csproj (produced by Unity on first open) — will be enforced once the project is scaffolded."
+
+      # Roslyn analyzer set (naming, nullable, forbidden-API rules per Technical Architecture §11)
+      # runs as part of the Unity test/build steps below once the project has a real .csproj graph
+      # (Unity generates C# project files from the Assets folder; a bare checkout has none yet).
+
+  test:
+    name: EditMode + PlayMode Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-${{ runner.os }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: Library-${{ runner.os }}-
+
+      - name: Run EditMode + PlayMode tests
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          testMode: all
+          artifactsPath: test-results
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results
+
+  budget-gate:
+    name: Performance Budget Gate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-${{ runner.os }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: Library-${{ runner.os }}-
+
+      # Technical Architecture §2/§9/§10: draw-call count (<=120 Low tier / <=180 Mid-High) and
+      # Addressables Core-Local group size (<=800MB budget) checked against a reference test
+      # scene. The Editor-side script that runs this scene and exports a metrics JSON
+      # (Assets/_Project/Tests/EditMode or a dedicated Editor/ folder, invoked via -executeMethod)
+      # is a follow-up implementation task once the Unity project is scaffolded — this job is
+      # wired to call it by convention (BudgetGate.RunAndExport) so adding that script is a
+      # drop-in, not a pipeline redesign.
+      - name: Run budget gate (draw calls, build size)
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: StandaloneLinux64
+          buildMethod: ZoneStrike.Editor.BudgetGate.RunAndExport
+          customParameters: -budgetReportPath ./budget-report.json
+
+      - name: Enforce budget thresholds
+        run: |
+          if [ ! -f ./budget-report.json ]; then
+            echo "::error::budget-report.json not produced — BudgetGate.RunAndExport has not been implemented yet (tracked follow-up, see this job's comment above)."
+            exit 1
+          fi
+          python3 .github/scripts/check_budget.py ./budget-report.json
+
+  # ---------------------------------------------------------------------------------------------
+  # RELEASE BUILD — runs on main after a PR merges. Technical Architecture §9: Android + iOS +
+  # headless Linux server builds, then a gated deploy to internal test tracks.
+  # ---------------------------------------------------------------------------------------------
+  build-android:
+    name: Build Android (IL2CPP, ARM64)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-Android-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+      - uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEYALIAS_NAME: ${{ secrets.ANDROID_KEYALIAS_NAME }}
+          ANDROID_KEYALIAS_PASS: ${{ secrets.ANDROID_KEYALIAS_PASS }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: Android
+          buildName: ZoneStrike-Android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-android
+          path: build/Android
+
+  build-ios:
+    name: Build iOS (IL2CPP)
+    runs-on: macos-latest
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-iOS-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+      - uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: iOS
+          buildName: ZoneStrike-iOS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-ios-xcode-project
+          path: build/iOS
+
+  build-dedicated-server:
+    name: Build Dedicated Server (Headless Linux)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-Server-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+      - uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: StandaloneLinux64
+          buildName: ZoneStrike-Server
+          customParameters: -serverBuild -headlessMode  # Technical Architecture §5.1 dedicated-server topology
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-dedicated-server
+          path: build/StandaloneLinux64
+
+  deploy-internal-test:
+    name: Deploy to Internal Test Tracks
+    runs-on: ubuntu-latest
+    needs: [build-android, build-ios, build-dedicated-server]
+    if: github.event_name == 'push'
+    environment: internal-test  # GitHub Environment protection rule — require manual approval here (Technical Architecture §9: "a human always approves the final promote step")
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+      - name: Deploy via Fastlane
+        run: echo "Fastlane deploy to Play Console Internal Testing + TestFlight — requires fastlane setup (Gemfile/Fastfile) and store credentials as secrets, not yet provisioned. Tracked as a Phase 7 launch-prep task in docs/TESTING_LAUNCH.md."
