@@ -5,7 +5,10 @@ using ZoneStrike.Core.EventChannels;
 
 namespace ZoneStrike.Presentation.UI
 {
-    public enum ScreenId { Boot, Home, Locker, BattlePass, Matchmaking, Loading, HUD, DeathRecap, Spectator, PostMatch, Settings }
+    // HeroSelect added in Phase 5 (docs/UI_UX_DESIGN.md §7) — the pre-match hero-pick screen was
+    // always part of the GDD §14 flow but was missed from this enum when it was first written in
+    // Phase 4; closing that gap here rather than letting the design doc and code silently drift.
+    public enum ScreenId { Boot, Home, Locker, BattlePass, HeroSelect, Matchmaking, Loading, HUD, DeathRecap, Spectator, PostMatch, Settings }
 
     /// <summary>
     /// Architecture role: Presentation-layer screen-stack controller (GDD §3 game flow). Reacts
