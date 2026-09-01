@@ -1,0 +1,20 @@
+{
+    "name": "ZoneStrike.Networking",
+    "rootNamespace": "ZoneStrike.Networking",
+    "references": [
+        "ZoneStrike.Core",
+        "Fusion",
+        "Fusion.Sockets",
+        "VContainer",
+        "UniTask"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -1,0 +1,19 @@
+{
+    "name": "ZoneStrike.Gameplay",
+    "rootNamespace": "ZoneStrike.Gameplay",
+    "references": [
+        "ZoneStrike.Core",
+        "Fusion",
+        "VContainer",
+        "UniTask"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

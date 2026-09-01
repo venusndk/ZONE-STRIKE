@@ -1,0 +1,25 @@
+{
+    "name": "ZoneStrike.Infrastructure",
+    "rootNamespace": "ZoneStrike.Infrastructure",
+    "references": [
+        "ZoneStrike.Core",
+        "ZoneStrike.Gameplay",
+        "ZoneStrike.Networking",
+        "ZoneStrike.Presentation",
+        "VContainer",
+        "UniTask",
+        "Unity.Addressables",
+        "Unity.ResourceManager",
+        "Unity.InputSystem",
+        "Unity.RenderPipelines.Universal.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
