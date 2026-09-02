@@ -48,6 +48,9 @@ sysinfo.txt
 .DS_Store
 Thumbs.db
 
+# Claude Code local session artifacts
+.claude/
+
 # ---- Secrets — never commit these regardless of source ----
 *.env
 .env.*
